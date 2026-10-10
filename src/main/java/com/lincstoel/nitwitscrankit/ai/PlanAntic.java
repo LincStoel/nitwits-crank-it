@@ -118,30 +118,34 @@ public class PlanAntic extends Behavior<Villager> {
      */
     private static Antic findBelt(ServerLevel level, Villager villager) {
         BlockPos origin = villager.blockPosition();
-        List<BlockPos> belts = new ArrayList<>();
+        List<Belt> belts = new ArrayList<>();
         NitwitAi.forEachBlockEntityNear(level, origin, be -> {
-            BlockPos pos = be.getBlockPos();
-            if (CreateCompat.isMovingFlatBelt(level, pos)
-                    && CreateCompat.beltSegmentsAhead(level, pos) >= MIN_BELT_RIDE
-                    && NitwitAi.hasHeadroom(level, villager, pos)) {
-                belts.add(pos.immutable());
+            if (CreateCompat.isMovingFlatBelt(be)) {
+                int ahead = CreateCompat.beltSegmentsAhead(be);
+                BlockPos pos = be.getBlockPos();
+                if (ahead >= MIN_BELT_RIDE && NitwitAi.hasHeadroom(level, villager, pos)) {
+                    belts.add(new Belt(pos.immutable(), ahead));
+                }
             }
         });
-        belts.sort(Comparator.<BlockPos>comparingInt(pos -> -CreateCompat.beltSegmentsAhead(level, pos))
-                .thenComparingDouble(pos -> pos.distSqr(origin)));
+        belts.sort(Comparator.comparingInt((Belt belt) -> -belt.segmentsAhead())
+                .thenComparingDouble(belt -> belt.pos().distSqr(origin)));
         int pathChecks = 0;
-        for (BlockPos belt : belts.subList(0, Math.min(MAX_BELT_SAFETY_CHECKS, belts.size()))) {
-            if (!isSafeRide(level, villager, belt)) {
+        for (Belt belt : belts.subList(0, Math.min(MAX_BELT_SAFETY_CHECKS, belts.size()))) {
+            if (!isSafeRide(level, villager, belt.pos())) {
                 continue;
             }
-            if (NitwitAi.canReachTop(villager, belt)) {
-                return new Antic(Antic.Kind.BELT_SURF, belt, belt);
+            if (NitwitAi.canReachTop(villager, belt.pos())) {
+                return new Antic(Antic.Kind.BELT_SURF, belt.pos(), belt.pos());
             }
             if (++pathChecks >= MAX_PATH_CHECKS) {
                 break;
             }
         }
         return null;
+    }
+
+    private record Belt(BlockPos pos, int segmentsAhead) {
     }
 
     /**
@@ -153,14 +157,14 @@ public class PlanAntic extends Behavior<Villager> {
         if (cells.size() < 2) {
             return false;
         }
-        BlockPos dropOff = cells.get(cells.size() - 1);
-        for (BlockPos cell : cells) {
-            boolean isSegment = cell != dropOff;
-            if ((isSegment && !NitwitAi.hasHeadroom(level, villager, cell)) || hasHazardAround(level, cell)) {
+        int dropOff = cells.size() - 1;
+        for (int i = 0; i < cells.size(); i++) {
+            BlockPos cell = cells.get(i);
+            if ((i < dropOff && !NitwitAi.hasHeadroom(level, villager, cell)) || hasHazardAround(level, cell)) {
                 return false;
             }
         }
-        return NitwitAi.isSafeLanding(level, dropOff);
+        return NitwitAi.isSafeLanding(level, cells.get(dropOff));
     }
 
     /** Any belt hazard or lava within a block of a rider at {@code cell} (rider-height and above included). */
@@ -180,9 +184,9 @@ public class PlanAntic extends Behavior<Villager> {
         BlockPos origin = villager.blockPosition();
         List<Antic> spots = new ArrayList<>();
         NitwitAi.forEachBlockEntityNear(level, origin, be -> {
-            BlockPos fan = be.getBlockPos();
-            Direction facing = CreateCompat.runningSidewaysFanFacing(level, fan);
+            Direction facing = CreateCompat.runningSidewaysFanFacing(be);
             if (facing != null) {
+                BlockPos fan = be.getBlockPos();
                 BlockPos stand = fan.relative(facing, FAN_STAND_DISTANCE);
                 if (NitwitAi.canStandAt(level, stand) && CreateCompat.isSafeFanSpot(level, fan, FAN_STAND_DISTANCE)) {
                     spots.add(new Antic(Antic.Kind.FAN_PLAY, stand, fan.immutable()));

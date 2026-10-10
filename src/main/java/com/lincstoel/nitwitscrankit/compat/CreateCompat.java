@@ -1,10 +1,15 @@
 package com.lincstoel.nitwitscrankit.compat;
 
-import com.simibubi.create.content.decoration.steamWhistle.WhistleBlock;
-import com.simibubi.create.content.decoration.steamWhistle.WhistleBlockEntity;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+
+import com.mojang.logging.LogUtils;
+import com.simibubi.create.content.decoration.steamWhistle.WhistleBlock;
+import com.simibubi.create.content.decoration.steamWhistle.WhistleBlockEntity;
 import com.simibubi.create.content.fluids.tank.FluidTankBlockEntity;
 import com.simibubi.create.content.kinetics.belt.BeltBlock;
 import com.simibubi.create.content.kinetics.belt.BeltBlockEntity;
@@ -30,17 +35,17 @@ import net.neoforged.fml.ModList;
 /**
  * The only place that touches Create's classes. Create is optional, so callers must check {@link #isLoaded()}
  * first; when it is false this class's Create-typed code is never run (or even linked).
+ * <p>
+ * Some of what's used here is Create's internals, which can change in any update. Every Create call goes through
+ * {@link #guard}, so if an update breaks one, the Create features switch off (with one error in the log) instead
+ * of crashing the server.
+ * <p>
+ * Each check comes in two forms: by block entity, for callers already iterating block entities, and by position.
  */
 public final class CreateCompat {
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final boolean LOADED = ModList.get().isLoaded("create");
-
-    // Matched by id so subclasses (e.g. valve handles extend HandCrankBlockEntity) are excluded.
-    private static final ResourceLocation HAND_CRANK_ID = ResourceLocation.fromNamespaceAndPath("create", "hand_crank");
-    private static final ResourceLocation TURNTABLE_ID = ResourceLocation.fromNamespaceAndPath("create", "turntable");
-    private static final ResourceLocation DESK_BELL_ID = ResourceLocation.fromNamespaceAndPath("create", "desk_bell");
-    private static final ResourceLocation STEAM_WHISTLE_ID = ResourceLocation.fromNamespaceAndPath("create", "steam_whistle");
-    private static final ResourceLocation BELT_ID = ResourceLocation.fromNamespaceAndPath("create", "belt");
-    private static final ResourceLocation ENCASED_FAN_ID = ResourceLocation.fromNamespaceAndPath("create", "encased_fan");
+    private static volatile boolean broken;
 
     // What a turn sets HandCrankBlockEntity.inUse to.
     private static final int CRANK_TURN_TICKS = 10;
@@ -48,36 +53,51 @@ public final class CreateCompat {
     private CreateCompat() {
     }
 
+    /** Create is installed, and compatible as far as we've found out. */
     public static boolean isLoaded() {
-        return LOADED;
+        return LOADED && !broken;
     }
 
     public static boolean isHandCrank(Level level, BlockPos pos) {
-        return LOADED && blockEntity(level, pos, HAND_CRANK_ID) instanceof HandCrankBlockEntity;
+        return isHandCrank(loadedBlockEntity(level, pos));
     }
 
-    public static boolean isTurntable(Level level, BlockPos pos) {
-        return LOADED && blockEntity(level, pos, TURNTABLE_ID) instanceof TurntableBlockEntity;
+    public static boolean isHandCrank(@Nullable BlockEntity be) {
+        return isBlock(be, Blocks.HAND_CRANK) && guard(() -> be instanceof HandCrankBlockEntity, false);
     }
 
     public static boolean isSpinningTurntable(Level level, BlockPos pos) {
-        return LOADED && blockEntity(level, pos, TURNTABLE_ID) instanceof TurntableBlockEntity turntable
-                && turntable.getSpeed() != 0;
+        return isSpinningTurntable(loadedBlockEntity(level, pos));
     }
 
-    /** Desk bells are rung through the block's normal use action, so only the id matters here. */
+    public static boolean isSpinningTurntable(@Nullable BlockEntity be) {
+        return isBlock(be, Blocks.TURNTABLE)
+                && guard(() -> be instanceof TurntableBlockEntity turntable && turntable.getSpeed() != 0, false);
+    }
+
     public static boolean isDeskBell(Level level, BlockPos pos) {
-        return LOADED && blockEntity(level, pos, DESK_BELL_ID) != null;
+        return isDeskBell(loadedBlockEntity(level, pos));
+    }
+
+    /** Desk bells are rung through the block's normal use action, so only the block matters here. */
+    public static boolean isDeskBell(@Nullable BlockEntity be) {
+        return isBlock(be, Blocks.DESK_BELL);
+    }
+
+    public static boolean isTootableWhistle(Level level, BlockPos pos) {
+        return isTootableWhistle(loadedBlockEntity(level, pos));
     }
 
     /** A steam whistle on a working boiler, i.e. one that will actually make noise when blown. */
-    public static boolean isTootableWhistle(Level level, BlockPos pos) {
-        if (!LOADED || !(blockEntity(level, pos, STEAM_WHISTLE_ID) instanceof WhistleBlockEntity whistle)) {
-            return false;
-        }
-        FluidTankBlockEntity tank = whistle.getTank();
-        // "Active" only means something is attached; the whistle also needs heat under the boiler to sound.
-        return tank != null && tank.boiler.isActive() && (tank.boiler.passiveHeat || tank.boiler.activeHeat > 0);
+    public static boolean isTootableWhistle(@Nullable BlockEntity be) {
+        return isBlock(be, Blocks.STEAM_WHISTLE) && guard(() -> {
+            if (!(be instanceof WhistleBlockEntity whistle)) {
+                return false;
+            }
+            FluidTankBlockEntity tank = whistle.getTank();
+            // "Active" only means something is attached; the whistle also needs heat under the boiler to sound.
+            return tank != null && tank.boiler.isActive() && (tank.boiler.passiveHeat || tank.boiler.activeHeat > 0);
+        }, false);
     }
 
     /**
@@ -85,32 +105,44 @@ public final class CreateCompat {
      * restores whatever the real redstone input says.
      */
     public static void setWhistleBlowing(Level level, BlockPos pos, boolean blowing) {
-        if (!LOADED || blockEntity(level, pos, STEAM_WHISTLE_ID) == null) {
+        if (!isBlock(loadedBlockEntity(level, pos), Blocks.STEAM_WHISTLE)) {
             return;
         }
-        BlockState state = level.getBlockState(pos);
-        boolean powered = blowing || level.hasNeighborSignal(pos);
-        if (state.getValue(WhistleBlock.POWERED) != powered) {
-            level.setBlock(pos, state.setValue(WhistleBlock.POWERED, powered), Block.UPDATE_CLIENTS);
-        }
+        guard(() -> {
+            BlockState state = level.getBlockState(pos);
+            boolean powered = blowing || level.hasNeighborSignal(pos);
+            if (state.getValue(WhistleBlock.POWERED) != powered) {
+                level.setBlock(pos, state.setValue(WhistleBlock.POWERED, powered), Block.UPDATE_CLIENTS);
+            }
+            return null;
+        }, null);
+    }
+
+    public static boolean isMovingFlatBelt(Level level, BlockPos pos) {
+        return isMovingFlatBelt(loadedBlockEntity(level, pos));
     }
 
     /** A flat, moving belt segment that will carry whoever stands on it. */
-    public static boolean isMovingFlatBelt(Level level, BlockPos pos) {
-        return LOADED && blockEntity(level, pos, BELT_ID) instanceof BeltBlockEntity belt
+    public static boolean isMovingFlatBelt(@Nullable BlockEntity be) {
+        return isBlock(be, Blocks.BELT) && guard(() -> be instanceof BeltBlockEntity belt
                 && belt.getBlockState().getValue(BeltBlock.SLOPE) == BeltSlope.HORIZONTAL
-                && belt.getSpeed() != 0;
+                && belt.getSpeed() != 0, false);
     }
 
-    /** How many more belt segments lie ahead of {@code pos} in the direction the belt is moving. */
-    public static int beltSegmentsAhead(Level level, BlockPos pos) {
-        if (!LOADED || !(blockEntity(level, pos, BELT_ID) instanceof BeltBlockEntity belt)) {
+    /** How many more belt segments lie ahead of this one in the direction the belt is moving. */
+    public static int beltSegmentsAhead(@Nullable BlockEntity be) {
+        if (!isBlock(be, Blocks.BELT)) {
             return 0;
         }
-        // A belt's facing points from its start segment (index 0) toward its end.
-        Direction startToEnd = belt.getBlockState().getValue(BlockStateProperties.HORIZONTAL_FACING);
-        boolean movingTowardEnd = belt.getMovementFacing() == startToEnd;
-        return movingTowardEnd ? belt.beltLength - 1 - belt.index : belt.index;
+        return guard(() -> {
+            if (!(be instanceof BeltBlockEntity belt)) {
+                return 0;
+            }
+            // A belt's facing points from its start segment (index 0) toward its end.
+            Direction startToEnd = belt.getBlockState().getValue(BlockStateProperties.HORIZONTAL_FACING);
+            boolean movingTowardEnd = belt.getMovementFacing() == startToEnd;
+            return movingTowardEnd ? belt.beltLength - 1 - belt.index : belt.index;
+        }, 0);
     }
 
     /**
@@ -118,28 +150,43 @@ public final class CreateCompat {
      * block space it gets dumped into past the end. Empty if there's no belt there.
      */
     public static List<BlockPos> beltRideCells(Level level, BlockPos pos) {
-        List<BlockPos> cells = new ArrayList<>();
-        if (LOADED && blockEntity(level, pos, BELT_ID) instanceof BeltBlockEntity belt) {
-            Direction moving = belt.getMovementFacing();
-            int ahead = beltSegmentsAhead(level, pos);
-            for (int i = 0; i <= ahead + 1; i++) {
-                cells.add(pos.relative(moving, i));
-            }
+        BlockEntity be = loadedBlockEntity(level, pos);
+        if (!isBlock(be, Blocks.BELT)) {
+            return List.of();
         }
-        return cells;
+        return guard(() -> {
+            List<BlockPos> cells = new ArrayList<>();
+            if (be instanceof BeltBlockEntity belt) {
+                Direction moving = belt.getMovementFacing();
+                int ahead = beltSegmentsAhead(belt);
+                for (int i = 0; i <= ahead + 1; i++) {
+                    cells.add(pos.relative(moving, i));
+                }
+            }
+            return cells;
+        }, List.of());
     }
 
     public static boolean isBelt(Level level, BlockPos pos) {
-        return LOADED && blockEntity(level, pos, BELT_ID) != null;
+        return isBlock(loadedBlockEntity(level, pos), Blocks.BELT);
+    }
+
+    public static Direction runningSidewaysFanFacing(Level level, BlockPos pos) {
+        return runningSidewaysFanFacing(loadedBlockEntity(level, pos));
     }
 
     /** The side a running, sideways-facing encased fan blows out of (or sucks into), else null. */
-    public static Direction runningSidewaysFanFacing(Level level, BlockPos pos) {
-        if (!LOADED || !(blockEntity(level, pos, ENCASED_FAN_ID) instanceof EncasedFanBlockEntity fan) || fan.getSpeed() == 0) {
+    public static Direction runningSidewaysFanFacing(@Nullable BlockEntity be) {
+        if (!isBlock(be, Blocks.ENCASED_FAN)) {
             return null;
         }
-        Direction facing = fan.getBlockState().getValue(BlockStateProperties.FACING);
-        return facing.getAxis().isHorizontal() ? facing : null;
+        return guard(() -> {
+            if (!(be instanceof EncasedFanBlockEntity fan) || fan.getSpeed() == 0) {
+                return null;
+            }
+            Direction facing = fan.getBlockState().getValue(BlockStateProperties.FACING);
+            return facing.getAxis().isHorizontal() ? facing : null;
+        }, null);
     }
 
     /**
@@ -148,20 +195,23 @@ public final class CreateCompat {
      * catalyst (washing is just a splash). The whole current is checked since the nitwit gets blown around in it.
      */
     public static boolean isSafeFanSpot(Level level, BlockPos pos, int distance) {
-        if (!LOADED || !(blockEntity(level, pos, ENCASED_FAN_ID) instanceof EncasedFanBlockEntity fan)) {
-            return false;
-        }
-        AirCurrent current = fan.getAirCurrent();
-        if (current == null || current.maxDistance < distance) {
-            return false;
-        }
-        for (float offset = 0; offset <= current.maxDistance; offset += 0.5F) {
-            FanProcessingType type = current.getTypeAt(offset);
-            if (type != null && type != AllFanProcessingTypes.SPLASHING) {
+        BlockEntity be = loadedBlockEntity(level, pos);
+        return isBlock(be, Blocks.ENCASED_FAN) && guard(() -> {
+            if (!(be instanceof EncasedFanBlockEntity fan)) {
                 return false;
             }
-        }
-        return true;
+            AirCurrent current = fan.getAirCurrent();
+            if (current == null || current.maxDistance < distance) {
+                return false;
+            }
+            for (float offset = 0; offset <= current.maxDistance; offset += 0.5F) {
+                FanProcessingType type = current.getTypeAt(offset);
+                if (type != null && type != AllFanProcessingTypes.SPLASHING) {
+                    return false;
+                }
+            }
+            return true;
+        }, false);
     }
 
     /**
@@ -170,25 +220,64 @@ public final class CreateCompat {
      * if another nitwit already turned it this tick, so a shared crank isn't turned (and synced) once per nitwit.
      */
     public static void turnHandCrank(Level level, BlockPos pos, boolean sync) {
-        if (LOADED && blockEntity(level, pos, HAND_CRANK_ID) instanceof HandCrankBlockEntity crank) {
-            if (crank.inUse >= CRANK_TURN_TICKS && !crank.backwards) {
-                return;
+        BlockEntity be = loadedBlockEntity(level, pos);
+        if (!isBlock(be, Blocks.HAND_CRANK)) {
+            return;
+        }
+        guard(() -> {
+            if (be instanceof HandCrankBlockEntity crank && !(crank.inUse >= CRANK_TURN_TICKS && !crank.backwards)) {
+                crank.turn(false);
+                if (sync) {
+                    crank.sendData();
+                }
             }
-            crank.turn(false);
-            if (sync) {
-                crank.sendData();
+            return null;
+        }, null);
+    }
+
+    /**
+     * Runs Create-touching code, or returns {@code fallback} if Create is missing or turned out to be incompatible
+     * (a field or method we use is gone or changed), in which case every Create feature is switched off.
+     */
+    private static <T> T guard(Supplier<T> call, T fallback) {
+        if (!isLoaded()) {
+            return fallback;
+        }
+        try {
+            return call.get();
+        } catch (LinkageError e) {
+            if (!broken) {
+                broken = true;
+                String version = ModList.get().getModContainerById("create")
+                        .map(container -> container.getModInfo().getVersion().toString())
+                        .orElse("?");
+                LOGGER.error("Create {} isn't compatible with this version of Nitwits Crank It; "
+                        + "its Create features are switched off.", version, e);
             }
+            return fallback;
         }
     }
 
-    private static BlockEntity blockEntity(Level level, BlockPos pos, ResourceLocation blockId) {
-        if (!level.isLoaded(pos)) {
-            return null;
+    /** Whether {@code be} is the block entity of {@code block} (matched by block, so subclasses like valve handles aren't). */
+    private static boolean isBlock(@Nullable BlockEntity be, Block block) {
+        return be != null && isLoaded() && be.getBlockState().is(block);
+    }
+
+    private static BlockEntity loadedBlockEntity(Level level, BlockPos pos) {
+        return level.isLoaded(pos) ? level.getBlockEntity(pos) : null;
+    }
+
+    /** Create's blocks, looked up when first needed (any later than registration is fine). Air if missing. */
+    private static final class Blocks {
+        static final Block HAND_CRANK = create("hand_crank");
+        static final Block TURNTABLE = create("turntable");
+        static final Block DESK_BELL = create("desk_bell");
+        static final Block STEAM_WHISTLE = create("steam_whistle");
+        static final Block BELT = create("belt");
+        static final Block ENCASED_FAN = create("encased_fan");
+
+        private static Block create(String path) {
+            return BuiltInRegistries.BLOCK.get(ResourceLocation.fromNamespaceAndPath("create", path));
         }
-        BlockEntity be = level.getBlockEntity(pos);
-        if (be != null && BuiltInRegistries.BLOCK.getKey(be.getBlockState().getBlock()).equals(blockId)) {
-            return be;
-        }
-        return null;
     }
 }

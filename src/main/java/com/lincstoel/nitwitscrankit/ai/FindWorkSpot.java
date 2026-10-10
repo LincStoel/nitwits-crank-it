@@ -32,8 +32,11 @@ import net.minecraft.world.entity.schedule.Activity;
  */
 public class FindWorkSpot extends Behavior<Villager> {
     private static final int MAX_PATH_CHECKS = 3;
+    // A nitwit with nothing to work at rescans less and less often, down to this many times the scan interval.
+    private static final int MAX_BACKOFF = 8;
 
     private long nextScan = -1;
+    private int backoff = 1;
 
     public FindWorkSpot() {
         super(Map.of());
@@ -51,7 +54,6 @@ public class FindWorkSpot extends Behavior<Villager> {
 
     @Override
     protected void start(ServerLevel level, Villager villager, long gameTime) {
-        nextScan = gameTime + Config.SCAN_INTERVAL_TICKS.get();
         Brain<Villager> brain = villager.getBrain();
         MemoryModuleType<WorkSpot> memory = NitwitsCrankIt.WORK_SPOT.get();
 
@@ -60,6 +62,7 @@ public class FindWorkSpot extends Behavior<Villager> {
         if (!NitwitAi.isNitwit(villager) || !NitwitAi.isWorkTime(villager) || !anyEnabled) {
             brain.eraseMemory(memory);
             leaveWork(brain);
+            scheduleNextScan(gameTime, true);
             return;
         }
 
@@ -73,6 +76,7 @@ public class FindWorkSpot extends Behavior<Villager> {
                     brain.setMemory(memory, better);
                 }
             }
+            scheduleNextScan(gameTime, true);
             return;
         }
 
@@ -83,6 +87,17 @@ public class FindWorkSpot extends Behavior<Villager> {
             brain.eraseMemory(memory);
             leaveWork(brain);
         }
+        scheduleNextScan(gameTime, best != null);
+    }
+
+    /**
+     * Rescans after the configured interval, or, while scans keep turning up nothing to work at, after twice as
+     * long each time (up to {@link #MAX_BACKOFF} times); most villages have no Create blocks at all. Outside work
+     * hours the interval resets, so the first scan of the work day comes promptly.
+     */
+    private void scheduleNextScan(long gameTime, boolean reset) {
+        backoff = reset ? 1 : Math.min(backoff * 2, MAX_BACKOFF);
+        nextScan = gameTime + (long) Config.SCAN_INTERVAL_TICKS.get() * backoff;
     }
 
     /** Whether the nitwit should keep the spot it already has. */
@@ -109,6 +124,7 @@ public class FindWorkSpot extends Behavior<Villager> {
         boolean turntables = Config.TURNTABLES_ENABLED.get();
         BlockPos origin = villager.blockPosition();
         Set<BlockPos> skip = unreachable(villager.getBrain(), gameTime);
+        Map<BlockPos, Integer> claims = NitwitAi.claimCountsNear(level, villager, origin);
         List<BlockPos> freeCranks = new ArrayList<>();
         List<BlockPos> freeTurntables = new ArrayList<>();
         List<BlockPos> sharedCranks = new ArrayList<>();
@@ -118,17 +134,17 @@ public class FindWorkSpot extends Behavior<Villager> {
             if (skip.contains(pos)) {
                 return;
             }
-            if (cranks && CreateCompat.isHandCrank(level, pos)) {
-                int claimants = NitwitAi.otherClaimants(level, villager, pos).size();
+            if (cranks && CreateCompat.isHandCrank(be)) {
+                int claimants = claims.getOrDefault(pos, 0);
                 if (claimants == 0) {
                     freeCranks.add(pos.immutable());
                 } else if (claimants < Config.MAX_NITWITS_PER_CRANK.get()) {
                     sharedCranks.add(pos.immutable());
                 }
             } else if (turntables) {
-                if (CreateCompat.isSpinningTurntable(level, pos)
-                        && isFreeTurntable(level, villager, pos)
-                        && NitwitAi.otherClaimants(level, villager, pos).isEmpty()) {
+                if (CreateCompat.isSpinningTurntable(be)
+                        && !claims.containsKey(pos)
+                        && isFreeTurntable(level, villager, pos)) {
                     freeTurntables.add(pos.immutable());
                 }
             }

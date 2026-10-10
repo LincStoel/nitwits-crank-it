@@ -1,8 +1,11 @@
 package com.lincstoel.nitwitscrankit.ai;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import com.lincstoel.nitwitscrankit.Config;
 import com.lincstoel.nitwitscrankit.NitwitsCrankIt;
@@ -71,6 +74,17 @@ final class NitwitAi {
         return brain.isActive(Activity.IDLE) || brain.isActive(Activity.MEET);
     }
 
+    /**
+     * The nearest {@code type} entity matching {@code test} that {@code villager} can see, from the villager's
+     * (vanilla, 16-block) sensor memory rather than a fresh entity search.
+     */
+    static <T extends LivingEntity> T nearestVisible(Villager villager, Class<T> type, Predicate<T> test) {
+        return villager.getBrain().getMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES)
+                .flatMap(visible -> visible.findClosest(entity -> type.isInstance(entity) && test.test(type.cast(entity))))
+                .map(type::cast)
+                .orElse(null);
+    }
+
     static boolean isPigRider(Villager villager) {
         return villager.getVehicle() instanceof Pig;
     }
@@ -123,6 +137,22 @@ final class NitwitAi {
                         && other.isAlive()
                         && other.getBrain().checkMemory(memory, MemoryStatus.VALUE_PRESENT)
                         && other.getBrain().getMemory(memory).get().pos().equals(pos));
+    }
+
+    /**
+     * How many villagers other than {@code self} have claimed each work spot that could be in search range of
+     * {@code origin}; one entity query for a whole search instead of one per candidate.
+     */
+    static Map<BlockPos, Integer> claimCountsNear(ServerLevel level, Villager self, BlockPos origin) {
+        MemoryModuleType<WorkSpot> memory = NitwitsCrankIt.WORK_SPOT.get();
+        // Claimants may stray from their spot, so look a bit past the search radius around every candidate.
+        int range = 2 * Config.SEARCH_RADIUS.get() + 16;
+        Map<BlockPos, Integer> counts = new HashMap<>();
+        for (Villager other : level.getEntitiesOfClass(Villager.class, new AABB(origin).inflate(range),
+                other -> other != self && other.isAlive())) {
+            other.getBrain().getMemory(memory).ifPresent(spot -> counts.merge(spot.pos(), 1, Integer::sum));
+        }
+        return counts;
     }
 
     /** How many other villagers claimed {@code spot} before {@code self}; 0 means {@code self} owns it. */

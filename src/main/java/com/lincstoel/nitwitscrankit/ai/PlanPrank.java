@@ -1,7 +1,6 @@
 package com.lincstoel.nitwitscrankit.ai;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -21,9 +20,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.level.block.BellBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
 
 /**
  * CORE behavior for nitwits: occasionally decides to pull a prank, then switches the nitwit into the
@@ -39,7 +40,7 @@ public class PlanPrank extends Behavior<Villager> {
     private long nextCheck = -1;
 
     public PlanPrank() {
-        super(Map.of());
+        super(Map.of(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES, MemoryStatus.REGISTERED));
     }
 
     @Override
@@ -96,8 +97,8 @@ public class PlanPrank extends Behavior<Villager> {
                         ? new PrankTarget(bell, kind, gameTime)
                         : null;
             }
-            case DESK_BELL -> nearestBlock(level, villager, kind, gameTime, pos -> CreateCompat.isDeskBell(level, pos));
-            case STEAM_WHISTLE -> nearestBlock(level, villager, kind, gameTime, pos -> CreateCompat.isTootableWhistle(level, pos));
+            case DESK_BELL -> nearestBlock(level, villager, kind, gameTime, CreateCompat::isDeskBell);
+            case STEAM_WHISTLE -> nearestBlock(level, villager, kind, gameTime, CreateCompat::isTootableWhistle);
             case WATER_PUSH -> {
                 Villager victim = findVictim(level, villager);
                 yield victim != null ? new PrankTarget(victim.blockPosition(), kind, victim, gameTime) : null;
@@ -167,12 +168,12 @@ public class PlanPrank extends Behavior<Villager> {
     }
 
     private static PrankTarget nearestBlock(ServerLevel level, Villager villager, PrankTarget.Kind kind, long gameTime,
-                                            Predicate<BlockPos> matches) {
+                                            Predicate<BlockEntity> matches) {
         BlockPos origin = villager.blockPosition();
         BlockPos[] best = {null};
         NitwitAi.forEachBlockEntityNear(level, origin, be -> {
             BlockPos pos = be.getBlockPos();
-            if (matches.test(pos) && (best[0] == null || pos.distSqr(origin) < best[0].distSqr(origin))) {
+            if ((best[0] == null || pos.distSqr(origin) < best[0].distSqr(origin)) && matches.test(be)) {
                 best[0] = pos.immutable();
             }
         });
@@ -181,19 +182,15 @@ public class PlanPrank extends Behavior<Villager> {
 
     /** The nearest other villager in sight standing on dry land right next to still water. */
     private static Villager findVictim(ServerLevel level, Villager nitwit) {
-        return level.getEntitiesOfClass(Villager.class, nitwit.getBoundingBox().inflate(MAX_VICTIM_DISTANCE),
-                        other -> other != nitwit
-                                && other.isAlive()
-                                && other.onGround()
-                                && !other.isInWater()
-                                && !other.isSleeping()
-                                && !other.isPassenger()
-                                && !other.isLeashed()
-                                && NitwitAi.waterSide(level, other.blockPosition()) != null
-                                && nitwit.hasLineOfSight(other))
-                .stream()
-                .min(Comparator.comparingDouble(nitwit::distanceToSqr))
-                .orElse(null);
+        return NitwitAi.nearestVisible(nitwit, Villager.class, other -> other != nitwit
+                && other.isAlive()
+                && other.closerThan(nitwit, MAX_VICTIM_DISTANCE)
+                && other.onGround()
+                && !other.isInWater()
+                && !other.isSleeping()
+                && !other.isPassenger()
+                && !other.isLeashed()
+                && NitwitAi.waterSide(level, other.blockPosition()) != null);
     }
 
     private static void startPrank(Brain<Villager> brain, PrankTarget target) {

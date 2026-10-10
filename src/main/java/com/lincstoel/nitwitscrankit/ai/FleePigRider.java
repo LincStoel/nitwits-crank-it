@@ -1,6 +1,5 @@
 package com.lincstoel.nitwitscrankit.ai;
 
-import java.util.Comparator;
 import java.util.Map;
 
 import com.lincstoel.nitwitscrankit.Config;
@@ -27,7 +26,10 @@ public class FleePigRider extends Behavior<Villager> {
     private Vec3 fleeTo;
 
     public FleePigRider() {
-        super(Map.of(MemoryModuleType.WALK_TARGET, MemoryStatus.REGISTERED), 1200);
+        super(Map.of(
+                MemoryModuleType.WALK_TARGET, MemoryStatus.REGISTERED,
+                MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES, MemoryStatus.REGISTERED
+        ), 1200);
     }
 
     @Override
@@ -86,14 +88,10 @@ public class FleePigRider extends Behavior<Villager> {
     }
 
     private static Villager nearestRider(ServerLevel level, Villager villager, double distance) {
-        return level.getEntitiesOfClass(Villager.class, villager.getBoundingBox().inflate(distance),
-                        other -> other != villager
-                                && NitwitAi.isNitwit(other)
-                                && NitwitAi.isPigRider(other)
-                                && other.closerThan(villager, distance))
-                .stream()
-                .min(Comparator.comparingDouble(villager::distanceToSqr))
-                .orElse(null);
+        return NitwitAi.nearestVisible(villager, Villager.class, other -> other != villager
+                && NitwitAi.isNitwit(other)
+                && NitwitAi.isPigRider(other)
+                && other.closerThan(villager, distance));
     }
 
     private static Vec3 fleePosition(Villager villager, Vec3 from) {
