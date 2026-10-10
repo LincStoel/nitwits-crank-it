@@ -1,6 +1,7 @@
 package com.lincstoel.nitwitscrankit.ai;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 import com.lincstoel.nitwitscrankit.Config;
@@ -8,6 +9,7 @@ import com.lincstoel.nitwitscrankit.NitwitsCrankIt;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
@@ -25,8 +27,11 @@ import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /** Shared lookups for the nitwit behaviors. */
@@ -68,6 +73,19 @@ final class NitwitAi {
 
     static boolean isPigRider(Villager villager) {
         return villager.getVehicle() instanceof Pig;
+    }
+
+    /**
+     * True unless the villager has strayed more than {@code maxDistance} from its village (its meeting point, or
+     * failing that its home). Villagers without either aren't tied to anywhere.
+     */
+    static boolean isNearVillage(Villager villager, double maxDistance) {
+        Brain<Villager> brain = villager.getBrain();
+        Optional<GlobalPos> anchor = brain.getMemory(MemoryModuleType.MEETING_POINT)
+                .or(() -> brain.getMemory(MemoryModuleType.HOME));
+        return anchor.filter(pos -> pos.dimension() == villager.level().dimension())
+                .map(pos -> pos.pos().closerToCenterThan(villager.position(), maxDistance))
+                .orElse(true);
     }
 
     /** Visits every loaded block entity within the configured search box around {@code origin}. */
@@ -124,10 +142,10 @@ final class NitwitAi {
         return claimRank(level, self, spot) == 0;
     }
 
-    /** True if any entity other than {@code self} is on top of the block at {@code pos}. */
+    /** True if any living entity other than {@code self} is on top of the block at {@code pos}. */
     static boolean isOccupiedByOthers(ServerLevel level, Villager self, BlockPos pos) {
         AABB above = new AABB(pos.getX(), pos.getY() + 0.4, pos.getZ(), pos.getX() + 1, pos.getY() + 1.5, pos.getZ() + 1);
-        return !level.getEntities(self, above, e -> e.isAlive() && !e.isSpectator()).isEmpty();
+        return !level.getEntities(self, above, e -> e instanceof LivingEntity && e.isAlive() && !e.isSpectator()).isEmpty();
     }
 
     /** True if a villager would fit standing on top of the block (turntable, belt, ...) at {@code pos}. */
@@ -145,6 +163,46 @@ final class NitwitAi {
         }
         Path path = villager.getNavigation().createPath(pos.above(), 1);
         return path != null && path.canReach();
+    }
+
+    /**
+     * True if the villager is within reach of the block at {@code pos} (a hand crank, say), or can walk to
+     * somewhere that is. Reach is measured from the feet to the block's center, like {@link WorkAtSpot} does.
+     */
+    static boolean canGetWithin(Villager villager, BlockPos pos, double reachSqr) {
+        Vec3 center = Vec3.atCenterOf(pos);
+        if (villager.distanceToSqr(center) <= reachSqr) {
+            return true;
+        }
+        Path path = villager.getNavigation().createPath(pos, 1);
+        Node end = path != null ? path.getEndNode() : null;
+        return end != null && Vec3.atBottomCenterOf(end.asBlockPos()).distanceToSqr(center) <= reachSqr;
+    }
+
+    /**
+     * True if a villager carried (or blown) into the block space {@code cell} gets through it and lands safely:
+     * nothing in the way, no lava, and solid dry ground at most two blocks down.
+     */
+    static boolean isSafeLanding(Level level, BlockPos cell) {
+        if (!isPassable(level, cell) || !isPassable(level, cell.above())) {
+            return false;
+        }
+        for (int drop = 0; drop <= 2; drop++) {
+            BlockPos feet = cell.below(drop);
+            if (canStandAt(level, feet)) {
+                return true;
+            }
+            if (!isPassable(level, feet.below())) {
+                return false;  // lands on something that isn't solid ground (a fence, a slab of lava...)
+            }
+        }
+        return false;
+    }
+
+    private static boolean isPassable(Level level, BlockPos pos) {
+        return level.isLoaded(pos)
+                && level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()
+                && !level.getFluidState(pos).is(FluidTags.LAVA);
     }
 
     /** Solid, dry ground under {@code stand} and two blocks of clear space for a villager. */
@@ -165,14 +223,15 @@ final class NitwitAi {
     }
 
     /**
-     * The side of the block space {@code feet} that is water (or drops straight into water), or null if none;
-     * i.e. which way to shove someone standing there to get them wet.
+     * The side of the block space {@code feet} that is still water (or drops straight into it), or null if none;
+     * i.e. which way to shove someone standing there to get them wet. Flowing water is left alone: it's usually
+     * someone's item or mob transport, and could carry the victim off somewhere it can't get back from.
      */
     static Direction waterSide(Level level, BlockPos feet) {
         for (Direction side : Direction.Plane.HORIZONTAL) {
             BlockPos next = feet.relative(side);
-            if (isWater(level, next)
-                    || (level.getBlockState(next).getCollisionShape(level, next).isEmpty() && isWater(level, next.below()))) {
+            if (isStillWater(level, next)
+                    || (level.getBlockState(next).getCollisionShape(level, next).isEmpty() && isStillWater(level, next.below()))) {
                 return side;
             }
         }
@@ -181,6 +240,12 @@ final class NitwitAi {
 
     static boolean isWater(Level level, BlockPos pos) {
         return level.getFluidState(pos).is(FluidTags.WATER);
+    }
+
+    /** A water source block that isn't flowing anywhere, e.g. part of a pond. */
+    static boolean isStillWater(Level level, BlockPos pos) {
+        FluidState fluid = level.getFluidState(pos);
+        return fluid.is(FluidTags.WATER) && fluid.isSource() && fluid.getFlow(level, pos).lengthSqr() == 0.0;
     }
 
     /** Disapproving villagers: a single unhappy particle over the head. */

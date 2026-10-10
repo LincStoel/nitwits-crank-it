@@ -171,8 +171,10 @@ public class RideSaddledPig extends Behavior<Villager> {
                 && other.closerThan(rider, CHASE_DISTANCE);
     }
 
+    /** Leashed or named pigs are someone's pets, not a nitwit's ride. */
     private static boolean isRideable(Pig pig) {
-        return pig.isAlive() && pig.isSaddled() && !pig.isVehicle() && !pig.isBaby();
+        return pig.isAlive() && pig.isSaddled() && !pig.isVehicle() && !pig.isBaby()
+                && !pig.isLeashed() && !pig.hasCustomName();
     }
 
     private static Pig findPig(Villager villager) {

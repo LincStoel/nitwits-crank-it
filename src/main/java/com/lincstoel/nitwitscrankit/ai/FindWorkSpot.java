@@ -2,9 +2,13 @@ package com.lincstoel.nitwitscrankit.ai;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import com.lincstoel.nitwitscrankit.Config;
 import com.lincstoel.nitwitscrankit.NitwitsCrankIt;
@@ -23,7 +27,8 @@ import net.minecraft.world.entity.schedule.Activity;
  * {@link NitwitsCrankIt#WORK_SPOT}, which is what lets the schedule move the nitwit into its WORK activity.
  * <p>
  * Preference: a free hand crank, then a free spinning turntable, then sharing a hand crank another nitwit owns
- * (up to {@link Config#MAX_NITWITS_PER_CRANK} per crank). Needs Create; without it this never finds anything.
+ * (up to {@link Config#MAX_NITWITS_PER_CRANK} per crank), each the nearest one it can actually get to. Needs
+ * Create; without it this never finds anything.
  */
 public class FindWorkSpot extends Behavior<Villager> {
     private static final int MAX_PATH_CHECKS = 3;
@@ -103,23 +108,22 @@ public class FindWorkSpot extends Behavior<Villager> {
         boolean cranks = Config.HAND_CRANKS_ENABLED.get();
         boolean turntables = Config.TURNTABLES_ENABLED.get();
         BlockPos origin = villager.blockPosition();
-        BlockPos skip = villager.getBrain().getMemory(NitwitsCrankIt.UNREACHABLE_SPOT.get()).orElse(null);
-        Nearest freeCrank = new Nearest(origin);
+        Set<BlockPos> skip = unreachable(villager.getBrain(), gameTime);
+        List<BlockPos> freeCranks = new ArrayList<>();
         List<BlockPos> freeTurntables = new ArrayList<>();
-        Nearest anyCrank = new Nearest(origin);
+        List<BlockPos> sharedCranks = new ArrayList<>();
 
         NitwitAi.forEachBlockEntityNear(level, origin, be -> {
             BlockPos pos = be.getBlockPos();
-            if (pos.equals(skip)) {
+            if (skip.contains(pos)) {
                 return;
             }
             if (cranks && CreateCompat.isHandCrank(level, pos)) {
                 int claimants = NitwitAi.otherClaimants(level, villager, pos).size();
                 if (claimants == 0) {
-                    freeCrank.offer(pos);
-                }
-                if (claimants < Config.MAX_NITWITS_PER_CRANK.get()) {
-                    anyCrank.offer(pos);
+                    freeCranks.add(pos.immutable());
+                } else if (claimants < Config.MAX_NITWITS_PER_CRANK.get()) {
+                    sharedCranks.add(pos.immutable());
                 }
             } else if (turntables) {
                 if (CreateCompat.isSpinningTurntable(level, pos)
@@ -130,44 +134,61 @@ public class FindWorkSpot extends Behavior<Villager> {
             }
         });
 
-        if (freeCrank.best != null) {
-            return new WorkSpot(freeCrank.best, WorkSpot.Kind.HAND_CRANK, gameTime);
+        Predicate<BlockPos> crankReachable = pos -> NitwitAi.canGetWithin(villager, pos, WorkAtSpot.REACH_SQR);
+        BlockPos crank = nearestReachable(origin, freeCranks, crankReachable);
+        if (crank != null) {
+            return new WorkSpot(crank, WorkSpot.Kind.HAND_CRANK, gameTime);
         }
-        // Pathfinding is the expensive check, so only try it on the few nearest candidates.
-        freeTurntables.sort(Comparator.comparingDouble(pos -> pos.distSqr(origin)));
-        for (BlockPos pos : freeTurntables.subList(0, Math.min(MAX_PATH_CHECKS, freeTurntables.size()))) {
-            if (NitwitAi.canReachTop(villager, pos)) {
-                return new WorkSpot(pos, WorkSpot.Kind.TURNTABLE, gameTime);
+        BlockPos turntable = nearestReachable(origin, freeTurntables, pos -> NitwitAi.canReachTop(villager, pos));
+        if (turntable != null) {
+            return new WorkSpot(turntable, WorkSpot.Kind.TURNTABLE, gameTime);
+        }
+        if (!freeOnly) {
+            BlockPos shared = nearestReachable(origin, sharedCranks, crankReachable);
+            if (shared != null) {
+                return new WorkSpot(shared, WorkSpot.Kind.HAND_CRANK, gameTime);
             }
         }
-        if (!freeOnly && anyCrank.best != null) {
-            return new WorkSpot(anyCrank.best, WorkSpot.Kind.HAND_CRANK, gameTime);
+        return null;
+    }
+
+    /** Pathfinding is the expensive check, so it's only tried on the few nearest candidates. */
+    private static BlockPos nearestReachable(BlockPos origin, List<BlockPos> candidates, Predicate<BlockPos> reachable) {
+        candidates.sort(Comparator.comparingDouble(pos -> pos.distSqr(origin)));
+        for (BlockPos pos : candidates.subList(0, Math.min(MAX_PATH_CHECKS, candidates.size()))) {
+            if (reachable.test(pos)) {
+                return pos;
+            }
         }
         return null;
+    }
+
+    /** The work spots this nitwit still remembers as unreachable at {@code gameTime}. */
+    private static Set<BlockPos> unreachable(Brain<Villager> brain, long gameTime) {
+        return brain.getMemory(NitwitsCrankIt.UNREACHABLE_SPOTS.get())
+                .map(spots -> spots.entrySet().stream()
+                        .filter(entry -> entry.getValue() > gameTime)
+                        .map(Map.Entry::getKey)
+                        .collect(Collectors.toSet()))
+                .orElse(Set.of());
+    }
+
+    /** Remembers {@code pos} as unreachable for {@code ticks}, forgetting any spots that have expired. */
+    static void markUnreachable(Brain<Villager> brain, BlockPos pos, long gameTime, int ticks) {
+        Map<BlockPos, Long> spots = new HashMap<>();
+        brain.getMemory(NitwitsCrankIt.UNREACHABLE_SPOTS.get()).ifPresent(old -> old.forEach((spot, until) -> {
+            if (until > gameTime) {
+                spots.put(spot, until);
+            }
+        }));
+        spots.put(pos.immutable(), gameTime + ticks);
+        brain.setMemory(NitwitsCrankIt.UNREACHABLE_SPOTS.get(), spots);
     }
 
     /** Drops out of WORK when its requirement no longer holds, falling back to vanilla idling. */
     private static void leaveWork(Brain<Villager> brain) {
         if (brain.isActive(Activity.WORK)) {
             brain.setActiveActivityIfPossible(Activity.WORK);
-        }
-    }
-
-    private static final class Nearest {
-        private final BlockPos origin;
-        private BlockPos best;
-        private double bestDist = Double.MAX_VALUE;
-
-        Nearest(BlockPos origin) {
-            this.origin = origin;
-        }
-
-        void offer(BlockPos pos) {
-            double dist = pos.distSqr(origin);
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = pos.immutable();
-            }
         }
     }
 }

@@ -1,0 +1,17 @@
+{
+  "values": [
+    "#minecraft:fire",
+    "#minecraft:campfires",
+    "minecraft:magma_block",
+    "minecraft:cactus",
+    "minecraft:sweet_berry_bush",
+    "minecraft:wither_rose",
+    "minecraft:pointed_dripstone",
+    { "id": "create:mechanical_saw", "required": false },
+    { "id": "create:mechanical_drill", "required": false },
+    { "id": "create:crushing_wheel", "required": false },
+    { "id": "create:crushing_wheel_controller", "required": false },
+    { "id": "create:deployer", "required": false },
+    { "id": "create:mechanical_roller", "required": false }
+  ]
+}

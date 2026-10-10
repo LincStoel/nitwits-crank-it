@@ -45,9 +45,10 @@ public abstract class VillagerMixin {
     private Collection<? extends MemoryModuleType<?>> nitwitsCrankIt$addMemoryTypes(Collection<? extends MemoryModuleType<?>> memoryTypes) {
         return ImmutableList.<MemoryModuleType<?>>builder()
                 .addAll(memoryTypes)
-                .add(NitwitsCrankIt.WORK_SPOT.get(), NitwitsCrankIt.UNREACHABLE_SPOT.get(),
+                .add(NitwitsCrankIt.WORK_SPOT.get(), NitwitsCrankIt.UNREACHABLE_SPOTS.get(),
                         NitwitsCrankIt.PRANK_TARGET.get(), NitwitsCrankIt.PRANK_COOLDOWNS.get(),
-                        NitwitsCrankIt.FOLLOW_TARGET.get(), NitwitsCrankIt.ANTIC.get(), NitwitsCrankIt.DIZZY.get())
+                        NitwitsCrankIt.FOLLOW_TARGET.get(), NitwitsCrankIt.ANTIC.get(), NitwitsCrankIt.DIZZY.get(),
+                        NitwitsCrankIt.CHASED_BY.get())
                 .build();
     }
 

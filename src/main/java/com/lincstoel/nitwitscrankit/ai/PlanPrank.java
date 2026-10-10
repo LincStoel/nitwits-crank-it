@@ -93,14 +93,14 @@ public class PlanPrank extends Behavior<Villager> {
                 BlockPos bell = villageBell(level, villager);
                 long cooldown = Config.BELL_PRANK_COOLDOWN_DAYS.get() * 24000L;
                 yield bell != null && BellPrankData.get(level).tryClaim(bell, gameTime, cooldown)
-                        ? new PrankTarget(bell, kind)
+                        ? new PrankTarget(bell, kind, gameTime)
                         : null;
             }
-            case DESK_BELL -> nearestBlock(level, villager, kind, pos -> CreateCompat.isDeskBell(level, pos));
-            case STEAM_WHISTLE -> nearestBlock(level, villager, kind, pos -> CreateCompat.isTootableWhistle(level, pos));
+            case DESK_BELL -> nearestBlock(level, villager, kind, gameTime, pos -> CreateCompat.isDeskBell(level, pos));
+            case STEAM_WHISTLE -> nearestBlock(level, villager, kind, gameTime, pos -> CreateCompat.isTootableWhistle(level, pos));
             case WATER_PUSH -> {
                 Villager victim = findVictim(level, villager);
-                yield victim != null ? new PrankTarget(victim.blockPosition(), kind, victim) : null;
+                yield victim != null ? new PrankTarget(victim.blockPosition(), kind, victim, gameTime) : null;
             }
         };
         if (target != null && kind != PrankTarget.Kind.VILLAGE_BELL) {
@@ -166,7 +166,7 @@ public class PlanPrank extends Behavior<Villager> {
         return pos;
     }
 
-    private static PrankTarget nearestBlock(ServerLevel level, Villager villager, PrankTarget.Kind kind,
+    private static PrankTarget nearestBlock(ServerLevel level, Villager villager, PrankTarget.Kind kind, long gameTime,
                                             Predicate<BlockPos> matches) {
         BlockPos origin = villager.blockPosition();
         BlockPos[] best = {null};
@@ -176,10 +176,10 @@ public class PlanPrank extends Behavior<Villager> {
                 best[0] = pos.immutable();
             }
         });
-        return best[0] != null ? new PrankTarget(best[0], kind) : null;
+        return best[0] != null ? new PrankTarget(best[0], kind, gameTime) : null;
     }
 
-    /** The nearest other villager standing on dry land right next to water. */
+    /** The nearest other villager in sight standing on dry land right next to still water. */
     private static Villager findVictim(ServerLevel level, Villager nitwit) {
         return level.getEntitiesOfClass(Villager.class, nitwit.getBoundingBox().inflate(MAX_VICTIM_DISTANCE),
                         other -> other != nitwit
@@ -188,7 +188,9 @@ public class PlanPrank extends Behavior<Villager> {
                                 && !other.isInWater()
                                 && !other.isSleeping()
                                 && !other.isPassenger()
-                                && NitwitAi.waterSide(level, other.blockPosition()) != null)
+                                && !other.isLeashed()
+                                && NitwitAi.waterSide(level, other.blockPosition()) != null
+                                && nitwit.hasLineOfSight(other))
                 .stream()
                 .min(Comparator.comparingDouble(nitwit::distanceToSqr))
                 .orElse(null);

@@ -14,10 +14,15 @@ import org.slf4j.Logger;
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.FluidTags;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.pathfinder.Path;
 
 /**
@@ -29,10 +34,16 @@ public class PlanAntic extends Behavior<Villager> {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final int CHECK_INTERVAL = 200;
     private static final int MAX_PATH_CHECKS = 3;
-    private static final int FAN_STAND_DISTANCE = 2;
+    static final int FAN_STAND_DISTANCE = 2;
     private static final int MIN_BELT_RIDE = 2;
     private static final int WATER_SEARCH_RADIUS = 10;
     private static final int WATER_SEARCH_HEIGHT = 4;
+    // Belts are checked for hazards (and drop-offs) before the costlier path check, but only so many of them.
+    private static final int MAX_BELT_SAFETY_CHECKS = 8;
+
+    /** Blocks that hurt a nitwit riding past them on a belt (saws, crushing wheels, fire...). */
+    static final TagKey<Block> BELT_HAZARDS =
+            TagKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath(NitwitsCrankIt.MOD_ID, "belt_hazards"));
 
     private long nextCheck = -1;
 
@@ -102,8 +113,8 @@ public class PlanAntic extends Behavior<Villager> {
     }
 
     /**
-     * A reachable moving flat belt segment with room to stand on it, preferring the one with the longest ride
-     * ahead of it (so the nitwit hops on upstream instead of being dumped straight off the end), then the nearest.
+     * A reachable moving flat belt segment with a safe ride ahead of it, preferring the one with the longest ride
+     * (so the nitwit hops on upstream instead of being dumped straight off the end), then the nearest.
      */
     private static Antic findBelt(ServerLevel level, Villager villager) {
         BlockPos origin = villager.blockPosition();
@@ -118,15 +129,53 @@ public class PlanAntic extends Behavior<Villager> {
         });
         belts.sort(Comparator.<BlockPos>comparingInt(pos -> -CreateCompat.beltSegmentsAhead(level, pos))
                 .thenComparingDouble(pos -> pos.distSqr(origin)));
-        for (BlockPos belt : belts.subList(0, Math.min(MAX_PATH_CHECKS, belts.size()))) {
+        int pathChecks = 0;
+        for (BlockPos belt : belts.subList(0, Math.min(MAX_BELT_SAFETY_CHECKS, belts.size()))) {
+            if (!isSafeRide(level, villager, belt)) {
+                continue;
+            }
             if (NitwitAi.canReachTop(villager, belt)) {
                 return new Antic(Antic.Kind.BELT_SURF, belt, belt);
+            }
+            if (++pathChecks >= MAX_PATH_CHECKS) {
+                break;
             }
         }
         return null;
     }
 
-    /** A reachable spot two blocks in front of the nearest running sideways-facing fan. */
+    /**
+     * Room to ride every segment from {@code start} to the end, nothing hazardous next to (or above) the way, and
+     * a safe landing where the belt dumps the nitwit off. Belts often feed saws, crushers, chutes and drops.
+     */
+    private static boolean isSafeRide(ServerLevel level, Villager villager, BlockPos start) {
+        List<BlockPos> cells = CreateCompat.beltRideCells(level, start);
+        if (cells.size() < 2) {
+            return false;
+        }
+        BlockPos dropOff = cells.get(cells.size() - 1);
+        for (BlockPos cell : cells) {
+            boolean isSegment = cell != dropOff;
+            if ((isSegment && !NitwitAi.hasHeadroom(level, villager, cell)) || hasHazardAround(level, cell)) {
+                return false;
+            }
+        }
+        return NitwitAi.isSafeLanding(level, dropOff);
+    }
+
+    /** Any belt hazard or lava within a block of a rider at {@code cell} (rider-height and above included). */
+    private static boolean hasHazardAround(ServerLevel level, BlockPos cell) {
+        for (BlockPos pos : BlockPos.betweenClosed(cell.offset(-1, -1, -1), cell.offset(1, 2, 1))) {
+            if (!level.isLoaded(pos)
+                    || level.getBlockState(pos).is(BELT_HAZARDS)
+                    || level.getFluidState(pos).is(FluidTags.LAVA)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** A reachable spot two blocks in front of the nearest running sideways-facing fan whose wind is harmless. */
     private static Antic findFan(ServerLevel level, Villager villager) {
         BlockPos origin = villager.blockPosition();
         List<Antic> spots = new ArrayList<>();
@@ -135,7 +184,7 @@ public class PlanAntic extends Behavior<Villager> {
             Direction facing = CreateCompat.runningSidewaysFanFacing(level, fan);
             if (facing != null) {
                 BlockPos stand = fan.relative(facing, FAN_STAND_DISTANCE);
-                if (NitwitAi.canStandAt(level, stand)) {
+                if (NitwitAi.canStandAt(level, stand) && CreateCompat.isSafeFanSpot(level, fan, FAN_STAND_DISTANCE)) {
                     spots.add(new Antic(Antic.Kind.FAN_PLAY, stand, fan.immutable()));
                 }
             }

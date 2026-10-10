@@ -52,12 +52,15 @@ public class PerformPrank extends Behavior<Villager> {
     private static final int DESK_BELL_PRESS_INTERVAL = 4;
     private static final int WHISTLE_TOOT_TICKS = 12;
     private static final int WHISTLE_PAUSE_TICKS = 6;
+    // How long past its toot a whistle may keep blowing if the prankster never lets go (died, unloaded...).
+    private static final int WHISTLE_RELEASE_MARGIN = 20;
 
     private enum Phase { APPROACH, ACT, FLEE, DONE }
 
     private Phase phase;
     private int phaseTicks;
     private int actionsLeft;
+    private boolean acted;
     private long nextAction;
     private boolean whistleBlowing;
     private Vec3 fleeTo;
@@ -75,6 +78,7 @@ public class PerformPrank extends Behavior<Villager> {
     @Override
     protected void start(ServerLevel level, Villager villager, long gameTime) {
         setPhase(Phase.APPROACH);
+        acted = false;
         whistleBlowing = false;
         approach(villager, target(villager));
     }
@@ -120,11 +124,13 @@ public class PerformPrank extends Behavior<Villager> {
                 if (gameTime < nextAction) {
                     return;
                 }
-                if (!targetStillValid(level, target)) {
+                if (!targetStillValid(level, target)
+                        || (target.victim() != null && !villager.hasLineOfSight(target.victim()))) {
                     setPhase(Phase.DONE);
                     return;
                 }
                 act(level, villager, target, gameTime);
+                acted = true;
                 if (actionsLeft <= 0 && !whistleBlowing) {
                     pulledItOff(level, villager, target);
                 }
@@ -154,11 +160,12 @@ public class PerformPrank extends Behavior<Villager> {
             case STEAM_WHISTLE -> {
                 // Alternate toot / pause until out of toots.
                 whistleBlowing = !whistleBlowing;
-                CreateCompat.setWhistleBlowing(level, pos, whistleBlowing);
                 if (whistleBlowing) {
+                    WhistleTracker.blow(level, pos, gameTime + WHISTLE_TOOT_TICKS + WHISTLE_RELEASE_MARGIN);
                     actionsLeft--;
                     nextAction = gameTime + WHISTLE_TOOT_TICKS;
                 } else {
+                    WhistleTracker.release(level, pos);
                     nextAction = gameTime + WHISTLE_PAUSE_TICKS;
                 }
             }
@@ -227,9 +234,14 @@ public class PerformPrank extends Behavior<Villager> {
     @Override
     protected void stop(ServerLevel level, Villager villager, long gameTime) {
         Brain<Villager> brain = villager.getBrain();
-        brain.getMemory(NitwitsCrankIt.PRANK_TARGET.get())
-                .filter(target -> target.kind() == PrankTarget.Kind.STEAM_WHISTLE)
-                .ifPresent(target -> CreateCompat.setWhistleBlowing(level, target.pos(), false));
+        brain.getMemory(NitwitsCrankIt.PRANK_TARGET.get()).ifPresent(target -> {
+            if (target.kind() == PrankTarget.Kind.STEAM_WHISTLE && whistleBlowing) {
+                WhistleTracker.release(level, target.pos());
+            } else if (target.kind() == PrankTarget.Kind.VILLAGE_BELL && !acted) {
+                // Never got to ring it, so the bell is fair game again.
+                BellPrankData.get(level).release(target.pos(), target.plannedAt());
+            }
+        });
         whistleBlowing = false;
         brain.eraseMemory(NitwitsCrankIt.PRANK_TARGET.get());
         brain.eraseMemory(MemoryModuleType.WALK_TARGET);

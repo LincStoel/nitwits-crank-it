@@ -35,6 +35,7 @@ public class DoAntic extends Behavior<Villager> {
     private static final int OFF_BELT_GRACE_TICKS = 30;
     private static final double BLOWN_AWAY_SQR = 2.5 * 2.5;
     private static final double AT_SPOT_SQR = 1.0;
+    private static final int FAN_STAND_DISTANCE = PlanAntic.FAN_STAND_DISTANCE;
 
     private enum Phase { APPROACH, PLAY, DONE }
 
@@ -165,7 +166,9 @@ public class DoAntic extends Behavior<Villager> {
     private static boolean focusStillThere(ServerLevel level, Antic antic) {
         return switch (antic.kind()) {
             case BELT_SURF -> CreateCompat.isMovingFlatBelt(level, antic.focus());
-            case FAN_PLAY -> CreateCompat.runningSidewaysFanFacing(level, antic.focus()) != null;
+            // Re-checked every tick of play, so lighting a catalyst in the wind ends the game.
+            case FAN_PLAY -> CreateCompat.runningSidewaysFanFacing(level, antic.focus()) != null
+                    && CreateCompat.isSafeFanSpot(level, antic.focus(), FAN_STAND_DISTANCE);
             case STARE_FISH -> NitwitAi.isWater(level, antic.focus());
         };
     }

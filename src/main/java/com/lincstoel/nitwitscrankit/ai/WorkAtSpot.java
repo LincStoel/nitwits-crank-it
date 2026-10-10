@@ -25,7 +25,7 @@ import net.minecraft.world.phys.Vec3;
 /** WORK behavior for nitwits: go to the remembered work spot, then turn the crank or ride the turntable. */
 public class WorkAtSpot extends Behavior<Villager> {
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static final double REACH_SQR = 2.5 * 2.5;
+    static final double REACH_SQR = 2.5 * 2.5;
     private static final float WALK_SPEED = 0.5F;
     private static final int TURN_INTERVAL = 5;   // each turn keeps the crank going for 10 ticks
     private static final int SYNC_INTERVAL = 10;  // keeps the client-side crank sound playing (multiple of TURN_INTERVAL)
@@ -165,7 +165,7 @@ public class WorkAtSpot extends Behavior<Villager> {
         }
         if (ticksFar >= GIVE_UP_TICKS) {
             brain.getMemory(NitwitsCrankIt.WORK_SPOT.get()).ifPresent(spot ->
-                    brain.setMemoryWithExpiry(NitwitsCrankIt.UNREACHABLE_SPOT.get(), spot.pos(), UNREACHABLE_MEMORY_TICKS));
+                    FindWorkSpot.markUnreachable(brain, spot.pos(), gameTime, UNREACHABLE_MEMORY_TICKS));
             brain.eraseMemory(NitwitsCrankIt.WORK_SPOT.get());
         } else if (lost) {
             brain.getMemory(NitwitsCrankIt.WORK_SPOT.get())

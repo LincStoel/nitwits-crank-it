@@ -67,6 +67,7 @@ public class PlanFollow extends Behavior<Villager> {
         }
         if (Config.HERO_FOLLOWING_ENABLED.get()
                 && gameTime >= nextHeroFollowAllowed
+                && NitwitAi.isNearVillage(villager, Config.HERO_FOLLOWING_MAX_DISTANCE.get())
                 && villager.getRandom().nextDouble() < Config.HERO_FOLLOWING_CHANCE.get()) {
             Player hero = findHero(level, villager);
             if (hero != null) {
@@ -94,7 +95,9 @@ public class PlanFollow extends Behavior<Villager> {
     }
 
     static boolean isHero(Player player) {
-        return player.isAlive() && !player.isSpectator() && player.hasEffect(MobEffects.HERO_OF_THE_VILLAGE);
+        // Not invisible ones: a nitwit trailing after thin air would give them away.
+        return player.isAlive() && !player.isSpectator() && !player.isInvisible()
+                && player.hasEffect(MobEffects.HERO_OF_THE_VILLAGE);
     }
 
     private static Player findHero(ServerLevel level, Villager villager) {

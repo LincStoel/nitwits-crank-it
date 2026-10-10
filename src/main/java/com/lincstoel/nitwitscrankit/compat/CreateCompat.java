@@ -2,12 +2,18 @@ package com.lincstoel.nitwitscrankit.compat;
 
 import com.simibubi.create.content.decoration.steamWhistle.WhistleBlock;
 import com.simibubi.create.content.decoration.steamWhistle.WhistleBlockEntity;
+import java.util.ArrayList;
+import java.util.List;
+
 import com.simibubi.create.content.fluids.tank.FluidTankBlockEntity;
 import com.simibubi.create.content.kinetics.belt.BeltBlock;
 import com.simibubi.create.content.kinetics.belt.BeltBlockEntity;
 import com.simibubi.create.content.kinetics.belt.BeltSlope;
 import com.simibubi.create.content.kinetics.crank.HandCrankBlockEntity;
+import com.simibubi.create.content.kinetics.fan.AirCurrent;
 import com.simibubi.create.content.kinetics.fan.EncasedFanBlockEntity;
+import com.simibubi.create.content.kinetics.fan.processing.AllFanProcessingTypes;
+import com.simibubi.create.content.kinetics.fan.processing.FanProcessingType;
 import com.simibubi.create.content.kinetics.turntable.TurntableBlockEntity;
 
 import net.minecraft.core.BlockPos;
@@ -35,6 +41,9 @@ public final class CreateCompat {
     private static final ResourceLocation STEAM_WHISTLE_ID = ResourceLocation.fromNamespaceAndPath("create", "steam_whistle");
     private static final ResourceLocation BELT_ID = ResourceLocation.fromNamespaceAndPath("create", "belt");
     private static final ResourceLocation ENCASED_FAN_ID = ResourceLocation.fromNamespaceAndPath("create", "encased_fan");
+
+    // What a turn sets HandCrankBlockEntity.inUse to.
+    private static final int CRANK_TURN_TICKS = 10;
 
     private CreateCompat() {
     }
@@ -104,6 +113,22 @@ public final class CreateCompat {
         return movingTowardEnd ? belt.beltLength - 1 - belt.index : belt.index;
     }
 
+    /**
+     * The belt segments a rider boarding at {@code pos} passes over (starting with {@code pos}), followed by the
+     * block space it gets dumped into past the end. Empty if there's no belt there.
+     */
+    public static List<BlockPos> beltRideCells(Level level, BlockPos pos) {
+        List<BlockPos> cells = new ArrayList<>();
+        if (LOADED && blockEntity(level, pos, BELT_ID) instanceof BeltBlockEntity belt) {
+            Direction moving = belt.getMovementFacing();
+            int ahead = beltSegmentsAhead(level, pos);
+            for (int i = 0; i <= ahead + 1; i++) {
+                cells.add(pos.relative(moving, i));
+            }
+        }
+        return cells;
+    }
+
     public static boolean isBelt(Level level, BlockPos pos) {
         return LOADED && blockEntity(level, pos, BELT_ID) != null;
     }
@@ -118,11 +143,37 @@ public final class CreateCompat {
     }
 
     /**
+     * True if a villager playing {@code distance} blocks in front of the fan at {@code pos} gets blown about
+     * harmlessly: the wind reaches that far, and nowhere along it is there a blasting, smoking or haunting
+     * catalyst (washing is just a splash). The whole current is checked since the nitwit gets blown around in it.
+     */
+    public static boolean isSafeFanSpot(Level level, BlockPos pos, int distance) {
+        if (!LOADED || !(blockEntity(level, pos, ENCASED_FAN_ID) instanceof EncasedFanBlockEntity fan)) {
+            return false;
+        }
+        AirCurrent current = fan.getAirCurrent();
+        if (current == null || current.maxDistance < distance) {
+            return false;
+        }
+        for (float offset = 0; offset <= current.maxDistance; offset += 0.5F) {
+            FanProcessingType type = current.getTypeAt(offset);
+            if (type != null && type != AllFanProcessingTypes.SPLASHING) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Turns the hand crank at {@code pos} the way a player's right-click does; each turn keeps it going for
-     * 10 ticks. With {@code sync}, also re-sends it to clients so the cranking sound keeps playing.
+     * 10 ticks. With {@code sync}, also re-sends it to clients so the cranking sound keeps playing. Does nothing
+     * if another nitwit already turned it this tick, so a shared crank isn't turned (and synced) once per nitwit.
      */
     public static void turnHandCrank(Level level, BlockPos pos, boolean sync) {
         if (LOADED && blockEntity(level, pos, HAND_CRANK_ID) instanceof HandCrankBlockEntity crank) {
+            if (crank.inUse >= CRANK_TURN_TICKS && !crank.backwards) {
+                return;
+            }
             crank.turn(false);
             if (sync) {
                 crank.sendData();

@@ -69,7 +69,8 @@ public class FollowEntity extends Behavior<Villager> {
                     && gameTime < target.until()
                     && entity instanceof Player player && PlanFollow.isHero(player)
                     && NitwitAi.isAwake(villager)
-                    && entity.closerThan(villager, LOSE_HERO_DISTANCE);
+                    && entity.closerThan(villager, LOSE_HERO_DISTANCE)
+                    && NitwitAi.isNearVillage(villager, Config.HERO_FOLLOWING_MAX_DISTANCE.get());
             case IRON_GOLEM -> Config.GOLEM_FOLLOWING_ENABLED.get()
                     && gameTime < target.until()
                     && NitwitAi.isPlayTime(villager)

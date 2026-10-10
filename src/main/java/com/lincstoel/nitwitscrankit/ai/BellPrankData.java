@@ -33,6 +33,15 @@ public class BellPrankData extends SavedData {
         return true;
     }
 
+    /** Undoes the claim made at {@code claimedAt} (the prank never came off), unless the bell was claimed again since. */
+    void release(BlockPos bell, long claimedAt) {
+        Long last = lastPranked.get(bell.asLong());
+        if (last != null && last == claimedAt) {
+            lastPranked.remove(bell.asLong());
+            setDirty();
+        }
+    }
+
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         ListTag list = new ListTag();

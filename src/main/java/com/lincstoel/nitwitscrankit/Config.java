@@ -234,6 +234,11 @@ public final class Config {
             .comment("Ticks after a nitwit loses interest before it can start following the hero again.")
             .defineInRange("cooldownTicks", 1200, 0, 240000);
 
+    public static final ModConfigSpec.IntValue HERO_FOLLOWING_MAX_DISTANCE = BUILDER
+            .comment("A nitwit stops following the hero once it is this many blocks from its village (its bell, or its bed",
+                    "if it has no bell), so it doesn't get led off into the wilderness.")
+            .defineInRange("maxDistanceFromVillage", 48, 16, 256);
+
     static {
         BUILDER.pop().push("anvilBonk");
     }
@@ -241,6 +246,16 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue ANVIL_BONK_ENABLED = BUILDER
             .comment("Any villager that survives being hit by a falling anvil becomes a nitwit, losing its job and trades.")
             .define("enabled", true);
+
+    public static final ModConfigSpec.BooleanValue ANVIL_BONK_SPARES_EXPERIENCED = BUILDER
+            .comment("Villagers that have already been traded with (and so, like in vanilla, are locked into their job)",
+                    "shrug off the anvil and keep their job and trades.")
+            .define("spareExperiencedVillagers", true);
+
+    public static final ModConfigSpec.BooleanValue ANVIL_UNBONK_ENABLED = BUILDER
+            .comment("A nitwit that survives a falling anvil comes to its senses and becomes an unemployed villager,",
+                    "free to take a job.")
+            .define("unbonk", true);
 
     static {
         BUILDER.pop();
