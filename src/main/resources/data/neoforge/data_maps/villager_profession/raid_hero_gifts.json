@@ -1,0 +1,7 @@
+{
+  "values": {
+    "minecraft:nitwit": {
+      "loot_table": "nitwits_crank_it:gameplay/hero_of_the_village/nitwit_gift"
+    }
+  }
+}
