@@ -24,7 +24,7 @@ Nitwits stay out of harm's way. They skip processing fans and belts that run int
 
 ## Configuration
 
-Every feature can be turned off or tuned. The config is a per-world server config at `saves/<world>/serverconfig/nitwits_crank_it-server.toml`. On a dedicated server it's `world/serverconfig/`. To give every new world your own defaults, put a copy in `defaultconfigs/`.
+Every feature can be turned off or tuned in `config/nitwits_crank_it-server.toml`. To override it for a single world, put a copy in `saves/<world>/serverconfig/` (on a dedicated server, `world/serverconfig/`).
 
 With [Configured](https://www.curseforge.com/minecraft/mc-mods/configured) installed, you can edit it in game from the mod list.
 

@@ -49,6 +49,11 @@ neoForge {
             server()
             programArgument("--nogui")
         }
+        create("serverNoCreate") {
+            server()
+            programArgument("--nogui")
+            gameDirectory = file("run-nocreate")
+        }
         configureEach {
             systemProperty("forge.logging.markers", "REGISTRIES")
             logLevel = org.slf4j.event.Level.DEBUG
