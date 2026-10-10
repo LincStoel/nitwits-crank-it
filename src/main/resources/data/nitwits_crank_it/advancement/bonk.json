@@ -1,0 +1,25 @@
+{
+  "parent": "nitwits_crank_it:root",
+  "display": {
+    "icon": {
+      "id": "minecraft:anvil"
+    },
+    "title": {
+      "translate": "advancements.nitwits_crank_it.bonk.title",
+      "fallback": "Bonk!"
+    },
+    "description": {
+      "translate": "advancements.nitwits_crank_it.bonk.description",
+      "fallback": "See a villager survive a falling anvil and come out of it a nitwit"
+    },
+    "frame": "goal"
+  },
+  "criteria": {
+    "bonk": {
+      "trigger": "nitwits_crank_it:nitwit_mischief",
+      "conditions": {
+        "kind": "bonk"
+      }
+    }
+  }
+}

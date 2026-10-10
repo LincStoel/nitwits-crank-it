@@ -1,0 +1,25 @@
+{
+  "parent": "nitwits_crank_it:root",
+  "display": {
+    "icon": {
+      "id": "minecraft:saddle"
+    },
+    "title": {
+      "translate": "advancements.nitwits_crank_it.pig_ride.title",
+      "fallback": "Hog Wild"
+    },
+    "description": {
+      "translate": "advancements.nitwits_crank_it.pig_ride.description",
+      "fallback": "See a nitwit hop on a saddled pig"
+    },
+    "frame": "task"
+  },
+  "criteria": {
+    "pig_ride": {
+      "trigger": "nitwits_crank_it:nitwit_mischief",
+      "conditions": {
+        "kind": "pig_ride"
+      }
+    }
+  }
+}

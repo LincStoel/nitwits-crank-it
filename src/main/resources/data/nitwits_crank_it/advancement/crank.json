@@ -1,0 +1,31 @@
+{
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "create"
+    }
+  ],
+  "parent": "nitwits_crank_it:root",
+  "display": {
+    "icon": {
+      "id": "create:hand_crank"
+    },
+    "title": {
+      "translate": "advancements.nitwits_crank_it.crank.title",
+      "fallback": "Crank It"
+    },
+    "description": {
+      "translate": "advancements.nitwits_crank_it.crank.description",
+      "fallback": "See a nitwit put in a hard day's work at a hand crank"
+    },
+    "frame": "task"
+  },
+  "criteria": {
+    "crank": {
+      "trigger": "nitwits_crank_it:nitwit_mischief",
+      "conditions": {
+        "kind": "crank"
+      }
+    }
+  }
+}

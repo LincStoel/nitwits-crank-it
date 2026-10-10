@@ -215,18 +215,22 @@ public final class CreateCompat {
     }
 
     /**
-     * Turns the hand crank at {@code pos} the way a player's right-click does; each turn keeps it going for
-     * 10 ticks. With {@code sync}, also re-sends it to clients so the cranking sound keeps playing. Does nothing
-     * if another nitwit already turned it this tick, so a shared crank isn't turned (and synced) once per nitwit.
+     * Turns the hand crank at {@code pos} the way a player's right-click does ({@code backwards} the way a
+     * sneaking one does); each turn keeps it going for 10 ticks. With {@code sync}, also re-sends it to clients so
+     * the cranking sound keeps playing.
+     * <p>
+     * A crank that's already turning keeps its direction (whoever started it decides), so nitwits sharing one
+     * don't fight over it. Does nothing if someone already turned it this tick, so a shared crank isn't turned
+     * (and synced) once per nitwit.
      */
-    public static void turnHandCrank(Level level, BlockPos pos, boolean sync) {
+    public static void turnHandCrank(Level level, BlockPos pos, boolean backwards, boolean sync) {
         BlockEntity be = loadedBlockEntity(level, pos);
         if (!isBlock(be, Blocks.HAND_CRANK)) {
             return;
         }
         guard(() -> {
-            if (be instanceof HandCrankBlockEntity crank && !(crank.inUse >= CRANK_TURN_TICKS && !crank.backwards)) {
-                crank.turn(false);
+            if (be instanceof HandCrankBlockEntity crank && crank.inUse < CRANK_TURN_TICKS) {
+                crank.turn(crank.inUse > 0 ? crank.backwards : backwards);
                 if (sync) {
                     crank.sendData();
                 }

@@ -3,6 +3,7 @@ package com.lincstoel.nitwitscrankit.ai;
 import java.util.Map;
 
 import com.lincstoel.nitwitscrankit.Config;
+import com.lincstoel.nitwitscrankit.NitwitMischiefTrigger;
 import com.lincstoel.nitwitscrankit.NitwitsCrankIt;
 import com.lincstoel.nitwitscrankit.compat.CreateCompat;
 import com.mojang.logging.LogUtils;
@@ -148,6 +149,7 @@ public class PerformPrank extends Behavior<Villager> {
             case VILLAGE_BELL -> {
                 BlockState state = level.getBlockState(pos);
                 ((BellBlock) state.getBlock()).attemptToRing(villager, level, pos, null);
+                NitwitMischiefTrigger.witness(level, villager, NitwitMischiefTrigger.VILLAGE_BELL);
                 actionsLeft--;
             }
             case DESK_BELL -> {

@@ -1,0 +1,25 @@
+{
+  "parent": "nitwits_crank_it:root",
+  "display": {
+    "icon": {
+      "id": "minecraft:bell"
+    },
+    "title": {
+      "translate": "advancements.nitwits_crank_it.village_bell.title",
+      "fallback": "Ding-Dong Ditch"
+    },
+    "description": {
+      "translate": "advancements.nitwits_crank_it.village_bell.description",
+      "fallback": "See a nitwit ring the village bell and run for it"
+    },
+    "frame": "task"
+  },
+  "criteria": {
+    "village_bell": {
+      "trigger": "nitwits_crank_it:nitwit_mischief",
+      "conditions": {
+        "kind": "village_bell"
+      }
+    }
+  }
+}

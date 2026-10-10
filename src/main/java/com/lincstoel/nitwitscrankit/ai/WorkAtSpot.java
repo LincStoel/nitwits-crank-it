@@ -3,6 +3,7 @@ package com.lincstoel.nitwitscrankit.ai;
 import java.util.Map;
 
 import com.lincstoel.nitwitscrankit.Config;
+import com.lincstoel.nitwitscrankit.NitwitMischiefTrigger;
 import com.lincstoel.nitwitscrankit.NitwitsCrankIt;
 import com.lincstoel.nitwitscrankit.compat.CreateCompat;
 import com.mojang.logging.LogUtils;
@@ -42,6 +43,8 @@ public class WorkAtSpot extends Behavior<Villager> {
     private int ticksFar;
     private int ticksOnTurntable;
     private boolean lost;
+    private boolean backwards;
+    private boolean cranking;
 
     public WorkAtSpot() {
         super(Map.of(
@@ -87,6 +90,8 @@ public class WorkAtSpot extends Behavior<Villager> {
             // New spot (first tick, or FindWorkSpot found something better).
             target = spot.pos();
             ticksFar = 0;
+            cranking = false;
+            backwards = villager.getRandom().nextDouble() < Config.WRONG_WAY_CHANCE.get();
             brain.eraseMemory(MemoryModuleType.LOOK_TARGET);
             walkTo(villager, spot);
         }
@@ -126,8 +131,12 @@ public class WorkAtSpot extends Behavior<Villager> {
             return false;
         }
         villager.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(spot.pos()));
+        if (!cranking) {
+            cranking = true;
+            NitwitMischiefTrigger.witness(level, villager, NitwitMischiefTrigger.CRANK);
+        }
         if (gameTime % TURN_INTERVAL == 0) {
-            CreateCompat.turnHandCrank(level, spot.pos(), gameTime % SYNC_INTERVAL == 0);
+            CreateCompat.turnHandCrank(level, spot.pos(), backwards, gameTime % SYNC_INTERVAL == 0);
         }
         if (Config.HEAD_SHAKE_ENABLED.get() && villager.getUnhappyCounter() < HEAD_SHAKE_REFRESH) {
             // Vanilla's "no" head-shake animation (synced to clients), without the "no" sound.
@@ -162,6 +171,7 @@ public class WorkAtSpot extends Behavior<Villager> {
             brain.setMemoryWithExpiry(NitwitsCrankIt.DIZZY.get(), Unit.INSTANCE,
                     DIZZY_MIN_TICKS + villager.getRandom().nextInt(DIZZY_EXTRA_TICKS));
             LOGGER.debug("Nitwit dizzy after {} ticks on a turntable", ticksOnTurntable);
+            NitwitMischiefTrigger.witness(level, villager, NitwitMischiefTrigger.DIZZY);
         }
         if (ticksFar >= GIVE_UP_TICKS) {
             brain.getMemory(NitwitsCrankIt.WORK_SPOT.get()).ifPresent(spot ->

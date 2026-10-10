@@ -10,6 +10,7 @@ import com.lincstoel.nitwitscrankit.ai.PrankTarget;
 import com.lincstoel.nitwitscrankit.ai.WhistleTracker;
 import com.lincstoel.nitwitscrankit.ai.WorkSpot;
 
+import net.minecraft.advancements.CriterionTrigger;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.util.Unit;
@@ -35,6 +36,8 @@ public class NitwitsCrankIt {
             DeferredRegister.create(Registries.ACTIVITY, MOD_ID);
     private static final DeferredRegister<LootItemConditionType> LOOT_CONDITIONS =
             DeferredRegister.create(Registries.LOOT_CONDITION_TYPE, MOD_ID);
+    private static final DeferredRegister<CriterionTrigger<?>> TRIGGERS =
+            DeferredRegister.create(Registries.TRIGGER_TYPE, MOD_ID);
 
     // None of these memories are saved; they are re-derived after a reload.
 
@@ -83,10 +86,15 @@ public class NitwitsCrankIt {
     public static final DeferredHolder<LootItemConditionType, LootItemConditionType> JUNK_GIFTS_ENABLED =
             LOOT_CONDITIONS.register("junk_gifts_enabled", () -> new LootItemConditionType(JunkGiftsEnabled.CODEC));
 
+    /** Advancement trigger for seeing nitwits get up to things. */
+    public static final DeferredHolder<CriterionTrigger<?>, NitwitMischiefTrigger> NITWIT_MISCHIEF =
+            TRIGGERS.register("nitwit_mischief", NitwitMischiefTrigger::new);
+
     public NitwitsCrankIt(IEventBus modBus, ModContainer container) {
         MEMORY_TYPES.register(modBus);
         ACTIVITIES.register(modBus);
         LOOT_CONDITIONS.register(modBus);
+        TRIGGERS.register(modBus);
         container.registerConfig(ModConfig.Type.SERVER, Config.SPEC);
         NeoForge.EVENT_BUS.register(AnvilBonk.class);
         NeoForge.EVENT_BUS.register(GolemChase.class);

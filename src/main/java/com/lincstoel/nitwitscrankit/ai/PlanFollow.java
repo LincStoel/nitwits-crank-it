@@ -4,9 +4,11 @@ import java.util.Map;
 import java.util.Optional;
 
 import com.lincstoel.nitwitscrankit.Config;
+import com.lincstoel.nitwitscrankit.NitwitMischiefTrigger;
 import com.lincstoel.nitwitscrankit.NitwitsCrankIt;
 
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.behavior.Behavior;
@@ -74,6 +76,9 @@ public class PlanFollow extends Behavior<Villager> {
                 long until = gameTime + MIN_FOLLOW_TICKS + villager.getRandom().nextInt(EXTRA_FOLLOW_TICKS);
                 nextHeroFollowAllowed = until + Config.HERO_FOLLOWING_COOLDOWN_TICKS.get();
                 startFollowing(brain, new FollowTarget(hero, FollowTarget.Kind.HERO, until));
+                if (hero instanceof ServerPlayer player) {
+                    NitwitMischiefTrigger.award(player, NitwitMischiefTrigger.HERO_FOLLOW);
+                }
                 return;
             }
         }

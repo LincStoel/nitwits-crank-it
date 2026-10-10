@@ -1,0 +1,31 @@
+{
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "create"
+    }
+  ],
+  "parent": "nitwits_crank_it:root",
+  "display": {
+    "icon": {
+      "id": "create:turntable"
+    },
+    "title": {
+      "translate": "advancements.nitwits_crank_it.dizzy.title",
+      "fallback": "Dizzy Spell"
+    },
+    "description": {
+      "translate": "advancements.nitwits_crank_it.dizzy.description",
+      "fallback": "See a nitwit stagger off a turntable"
+    },
+    "frame": "task"
+  },
+  "criteria": {
+    "dizzy": {
+      "trigger": "nitwits_crank_it:nitwit_mischief",
+      "conditions": {
+        "kind": "dizzy"
+      }
+    }
+  }
+}

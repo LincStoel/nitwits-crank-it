@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.lincstoel.nitwitscrankit.Config;
+import com.lincstoel.nitwitscrankit.NitwitMischiefTrigger;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -113,6 +114,7 @@ public class RideSaddledPig extends Behavior<Villager> {
             brain.eraseMemory(MemoryModuleType.WALK_TARGET);
             if (villager.startRiding(pig)) {
                 villager.playSound(SoundEvents.VILLAGER_YES, 1.0F, 1.2F);
+                NitwitMischiefTrigger.witness(level, villager, NitwitMischiefTrigger.PIG_RIDE);
                 NitwitAi.happyParticles(level, villager, 3);
             }
         } else if (!brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)) {

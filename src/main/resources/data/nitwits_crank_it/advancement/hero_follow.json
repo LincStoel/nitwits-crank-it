@@ -1,0 +1,25 @@
+{
+  "parent": "nitwits_crank_it:root",
+  "display": {
+    "icon": {
+      "id": "minecraft:emerald"
+    },
+    "title": {
+      "translate": "advancements.nitwits_crank_it.hero_follow.title",
+      "fallback": "Tag-Along"
+    },
+    "description": {
+      "translate": "advancements.nitwits_crank_it.hero_follow.description",
+      "fallback": "As Hero of the Village, pick up a nitwit following you around"
+    },
+    "frame": "task"
+  },
+  "criteria": {
+    "hero_follow": {
+      "trigger": "nitwits_crank_it:nitwit_mischief",
+      "conditions": {
+        "kind": "hero_follow"
+      }
+    }
+  }
+}

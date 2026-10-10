@@ -1,5 +1,6 @@
 package com.lincstoel.nitwitscrankit;
 
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -21,7 +22,7 @@ public final class AnvilBonk {
     public static void onDamaged(LivingDamageEvent.Post event) {
         if (!Config.ANVIL_BONK_ENABLED.get()
                 || !(event.getEntity() instanceof Villager villager)
-                || villager.level().isClientSide()
+                || !(villager.level() instanceof ServerLevel level)
                 || !villager.isAlive()
                 || !event.getSource().is(DamageTypes.FALLING_ANVIL)) {
             return;
@@ -48,5 +49,6 @@ public final class AnvilBonk {
         villager.setVillagerXp(0);
         villager.setVillagerData(data.setProfession(VillagerProfession.NITWIT).setLevel(1));
         villager.playSound(SoundEvents.VILLAGER_NO, 1.0F, 0.8F);
+        NitwitMischiefTrigger.witness(level, villager, NitwitMischiefTrigger.BONK);
     }
 }
