@@ -8,8 +8,13 @@ version = "${mod_version}"
 displayName = "${mod_name}"
 authors = "${mod_authors}"
 description = '''
-Nitwits find nearby Create hand cranks during the villager work day and crank them.
+Gives nitwits something to do. With Create installed, they turn hand cranks and ride spinning turntables during the work day, then get dizzy.
+In the afternoon they pull pranks (ringing the village bell, desk bells and steam whistles, shoving villagers into ponds), surf belts, play in fan wind, "fish" with a stick, ride saddled pigs, and tag along after iron golems and Heroes of the Village.
+Iron golems chase pranksters. Heroes get junk gifts. A villager that survives a falling anvil becomes a nitwit.
 '''
+
+[modproperties.${mod_id}]
+configuredBackground = "minecraft:textures/block/hay_block_side.png"
 
 [[mixins]]
 config = "${mod_id}.mixins.json"
@@ -17,7 +22,7 @@ config = "${mod_id}.mixins.json"
 [[dependencies.${mod_id}]]
 modId = "neoforge"
 type = "required"
-versionRange = "[${neo_version},)"
+versionRange = "[21.1.0,)"
 ordering = "NONE"
 side = "BOTH"
 
@@ -28,9 +33,27 @@ versionRange = "[${minecraft_version}]"
 ordering = "NONE"
 side = "BOTH"
 
+# Optional; the hand crank, turntable, desk bell, steam whistle, belt and fan features need it. Create internals
+# are read directly, so only versions they were verified against are accepted.
 [[dependencies.${mod_id}]]
 modId = "create"
 type = "optional"
-versionRange = "[6.0.0,)"
+versionRange = "[6.0.10,6.1)"
 ordering = "AFTER"
 side = "BOTH"
+
+# Optional; shows what a nitwit is up to.
+[[dependencies.${mod_id}]]
+modId = "jade"
+type = "optional"
+versionRange = "[15.10,)"
+ordering = "NONE"
+side = "BOTH"
+
+# Optional; in-game config editing.
+[[dependencies.${mod_id}]]
+modId = "configured"
+type = "optional"
+versionRange = "[2.6,)"
+ordering = "NONE"
+side = "CLIENT"

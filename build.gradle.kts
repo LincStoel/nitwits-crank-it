@@ -4,7 +4,25 @@ plugins {
 }
 
 val modVersion = project.property("mod_version") as String
-val createJar = file(project.property("create_jar") as String)
+
+repositories {
+    maven("https://maven.createmod.net") {
+        content { includeGroup("com.simibubi.create") }
+    }
+    exclusiveContent {
+        forRepository { maven("https://api.modrinth.com/maven") }
+        filter { includeGroup("maven.modrinth") }
+    }
+}
+
+// The full Create jar (with its jar-in-jar libraries), resolved from Create's maven.
+val createJar: Configuration by configurations.creating {
+    isTransitive = false
+}
+
+// Mods only loaded in dev runs, never exposed as dependencies of the built mod.
+val localRuntime: Configuration by configurations.creating
+configurations.runtimeClasspath.get().extendsFrom(localRuntime)
 
 version = modVersion
 group = project.property("mod_group_id") as String
@@ -21,6 +39,11 @@ neoForge {
     runs {
         create("client") {
             client()
+        }
+        // Same as "client", but without Create, to check the mod still works on its own.
+        create("clientNoCreate") {
+            client()
+            gameDirectory = file("run-nocreate")
         }
         create("server") {
             server()
@@ -42,7 +65,7 @@ neoForge {
 // Create's classes reference its jar-in-jar libraries (ponder, flywheel, registrate), so they're
 // extracted and put on the compile classpath too.
 val extractCreateLibs by tasks.registering(Copy::class) {
-    from(zipTree(createJar)) {
+    from({ zipTree(createJar.singleFile) }) {
         include("META-INF/jarjar/*.jar")
         eachFile { path = name }
         includeEmptyDirs = false
@@ -51,17 +74,27 @@ val extractCreateLibs by tasks.registering(Copy::class) {
 }
 
 dependencies {
+    createJar("com.simibubi.create:create-1.21.1:${project.property("create_version")}")
     compileOnly(files(createJar))
     compileOnly(fileTree(layout.buildDirectory.dir("createLibs")).builtBy(extractCreateLibs))
+
+    compileOnly("maven.modrinth:jade:${project.property("jade_version")}")
+    localRuntime("maven.modrinth:jade:${project.property("jade_version")}")
 }
 
 // Create bundles flywheel/ponder/registrate via jar-in-jar, so in dev it's loaded from run/mods
 // like a normal installed mod instead of from the classpath.
+// Only the "client" and "server" runs share run/; "clientNoCreate" runs in run-nocreate/ without it.
 val copyCreateToRun by tasks.registering(Copy::class) {
     from(createJar)
     into(layout.projectDirectory.dir("run/mods"))
+    rename { "create.jar" }
+    doFirst {
+        // Jars an older version of this task copied in under their own names.
+        delete(fileTree(layout.projectDirectory.dir("run/mods")) { include("create-1.21.1-*.jar") })
+    }
 }
-tasks.matching { it.name.startsWith("prepare") && it.name.endsWith("Run") }.configureEach {
+tasks.matching { it.name.startsWith("prepare") && it.name.endsWith("Run") && !it.name.contains("NoCreate") }.configureEach {
     dependsOn(copyCreateToRun)
 }
 
