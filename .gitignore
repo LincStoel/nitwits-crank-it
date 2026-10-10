@@ -45,3 +45,5 @@ bin/
 run/
 runs/
 run-nocreate/
+run-client/
+run-bare/

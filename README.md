@@ -30,6 +30,7 @@ With [Configured](https://www.curseforge.com/minecraft/mc-mods/configured) insta
 
 ## Compatibility
 
+- **Server-side only is fine.** Players can join a server that has the mod without installing it themselves. They only need it for the Jade status line, and to see config names in Configured when playing singleplayer. (Create, if the server uses it, still has to be on every client, as usual.)
 - **Create** (optional, 6.0.10 and later 6.0.x builds) adds the hand crank, turntable, desk bell, steam whistle, belt and fan features. Without Create, everything else still works. If a future Create update changes something this mod relies on, the Create features switch themselves off and log an error. They don't crash the game.
 - **Jade** (optional) shows what a nitwit is up to when you look at it. Install the mod on both the server and the client for this to work.
 - **Configured** (optional, client) gives you an in-game config screen.
@@ -40,4 +41,7 @@ With [Configured](https://www.curseforge.com/minecraft/mc-mods/configured) insta
 ./gradlew build          # the mod jar ends up in build/libs/
 ./gradlew runClient      # dev client, with Create and Jade
 ./gradlew runClientNoCreate   # dev client without Create (game directory: run-nocreate/)
+./gradlew runServer / runServerNoCreate   # dev servers, sharing run/ and run-nocreate/ with the clients above
+./gradlew runClientJoin  # a second client (run-client/) that joins the local runServer, for testing as a player
+./gradlew runClientBare  # a client without this mod (or any other) that joins the local runServerNoCreate
 ```

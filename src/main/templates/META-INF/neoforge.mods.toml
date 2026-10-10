@@ -6,6 +6,8 @@ license = "All Rights Reserved"
 modId = "${mod_id}"
 version = "${mod_version}"
 displayName = "${mod_name}"
+# Server-side only works: players don't need the mod to join a server that has it.
+displayTest = "IGNORE_SERVER_VERSION"
 authors = "${mod_authors}"
 description = '''
 Gives nitwits something to do. With Create installed, they turn hand cranks and ride spinning turntables during the work day, then get dizzy.
