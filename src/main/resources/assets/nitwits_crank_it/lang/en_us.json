@@ -61,7 +61,6 @@
   "nitwits_crank_it.configuration.anvilBonk": "Anvil Bonk",
   "nitwits_crank_it.configuration.anvilBonk.enabled": "Enabled",
   "nitwits_crank_it.configuration.anvilBonk.spareExperiencedVillagers": "Spare Experienced Villagers",
-  "nitwits_crank_it.configuration.anvilBonk.unbonk": "Un-Bonk Nitwits",
 
   "config.jade.plugin_nitwits_crank_it.nitwit_status": "Nitwit Activity",
   "nitwits_crank_it.status.cranking": "Cranking",

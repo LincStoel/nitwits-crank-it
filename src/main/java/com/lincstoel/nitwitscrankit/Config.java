@@ -303,12 +303,6 @@ public final class Config {
                     "shrug off the anvil and keep their job and trades.")
             .define("spareExperiencedVillagers", true);
 
-    public static final ModConfigSpec.BooleanValue ANVIL_UNBONK_ENABLED = BUILDER
-            .translation("nitwits_crank_it.configuration.anvilBonk.unbonk")
-            .comment("A nitwit that survives a falling anvil comes to its senses and becomes an unemployed villager,",
-                    "free to take a job.")
-            .define("unbonk", true);
-
     static {
         BUILDER.pop();
     }
